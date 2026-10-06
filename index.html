@@ -106,4 +106,55 @@ details summary{cursor:pointer;color:#6750a4;font-weight:850;margin-top:12px}.an
 <button class=resultBtn id=showResult>Нәтижені көрсету</button><div class=score id=scoreBox></div></section></main><script>
 document.querySelectorAll('.interactive .opts').forEach(opts=>{[...opts.children].forEach((op,i)=>{op.dataset.letter=String.fromCharCode(65+i);op.addEventListener('click',()=>{[...opts.children].forEach(x=>x.classList.remove('selected'));op.classList.add('selected')})})});
 document.getElementById('showResult')?.addEventListener('click',()=>{let score=0,empty=0;const qs=[...document.querySelectorAll('.review .rq.interactive')];qs.forEach(q=>{const ops=[...q.querySelectorAll('.opts>div')];ops.forEach(x=>x.classList.remove('correct','wrong'));const right=ops.find(x=>x.dataset.letter===q.dataset.answer);right?.classList.add('correct');const sel=ops.find(x=>x.classList.contains('selected'));if(!sel)empty++;else if(sel.dataset.letter===q.dataset.answer)score++;else sel.classList.add('wrong')});const b=document.getElementById('scoreBox');b.classList.add('show');b.textContent=`Нәтиже: ${score} / ${qs.length}`+(empty?` · Жауап берілмеген: ${empty}`:'');b.scrollIntoView({behavior:'smooth',block:'center'})});
-</script></body></html>
+</script>
+<style id="study-tools-style">
+#studyCanvas{position:absolute;left:0;top:0;z-index:999990;pointer-events:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.study-drawing #studyCanvas{pointer-events:auto;cursor:crosshair}
+#studyTools{position:fixed;right:14px;bottom:14px;z-index:1000002;display:flex;flex-direction:column;gap:6px;padding:7px;background:#102b4c;border-radius:12px;box-shadow:0 14px 38px rgba(0,0,0,.24)}
+#studyTools button{width:108px;border:0;border-radius:7px;background:#fff;color:#102b4c;padding:10px 11px;font:800 12px/1.2 Arial,sans-serif;text-align:left;cursor:pointer}
+#studyTools button.active{background:#c6a15b;color:#102b4c}
+#studyNotes{position:fixed;right:136px;bottom:14px;z-index:1000003;width:min(380px,calc(100vw - 165px));background:#fff;border:1px solid #dbe2ea;border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.25);padding:12px;display:none}
+#studyNotes.open{display:block}
+#studyNotes textarea{width:100%;min-height:190px;resize:vertical;border:1px solid #dbe2ea;border-radius:8px;padding:10px;font:15px/1.5 system-ui,-apple-system,sans-serif}
+.snHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font:800 14px Arial,sans-serif}
+.snHead button,#clearStudyNotes{width:auto!important;padding:7px 9px!important}
+.snFoot{display:flex;justify-content:space-between;align-items:center;margin-top:7px;font:12px Arial,sans-serif;color:#6d6971}
+html.study-lock,body.study-lock{overscroll-behavior:none!important;scroll-behavior:auto!important}
+body.study-lock{touch-action:none!important}
+@media(max-width:600px){#studyTools{right:8px;bottom:8px}#studyTools button{width:96px;padding:9px}#studyNotes{right:8px;left:8px;bottom:245px;width:auto}}
+</style>
+<svg id="studyCanvas" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+<div id="studyNotes"><div class="snHead"><span>Notes</span><button type="button" id="closeStudyNotes">×</button></div><textarea id="studyNoteText" placeholder="Write your notes here…"></textarea><div class="snFoot"><span>Saved automatically</span><button type="button" id="clearStudyNotes">Clear</button></div></div>
+<div id="studyTools" aria-label="Study tools"><button type="button" data-action="notes">Notes</button><button type="button" data-tool="pen">✎ Pen</button><button type="button" data-tool="marker">▰ Marker</button><button type="button" data-tool="eraser">⌫ Eraser</button><button type="button" data-action="undo">↶ Undo</button><button type="button" data-action="clear">Clear drawing</button></div>
+<script id="study-tools-js">
+(function(){
+"use strict";
+const svg=document.getElementById("studyCanvas"),bar=document.getElementById("studyTools"),notes=document.getElementById("studyNotes"),note=document.getElementById("studyNoteText");
+let tool=null,drawing=false,current=null,points=[],lockedY=0,lockGuard=false;
+const DRAW_KEY="magist_countable_drawing_v1",NOTE_KEY="magist_countable_notes_v1";
+function pageSize(){const w=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth,innerWidth),h=Math.max(document.documentElement.scrollHeight,document.body.scrollHeight,innerHeight);svg.setAttribute("width",w);svg.setAttribute("height",h);svg.setAttribute("viewBox","0 0 "+w+" "+h);svg.style.width=w+"px";svg.style.height=h+"px"}
+function pos(e){return[e.clientX+(window.scrollX||0),e.clientY+(window.scrollY||0)]}
+function pathData(a){if(!a.length)return"";let d="M "+a[0][0]+" "+a[0][1];for(let i=1;i<a.length;i++)d+=" L "+a[i][0]+" "+a[i][1];if(a.length===1)d+=" L "+(a[0][0]+.1)+" "+(a[0][1]+.1);return d}
+function saveDrawing(){try{localStorage.setItem(DRAW_KEY,svg.innerHTML)}catch(e){}}
+function restoreDrawing(){try{svg.innerHTML=localStorage.getItem(DRAW_KEY)||""}catch(e){}}
+function blockTouch(e){if(tool){e.preventDefault();e.stopPropagation()}}
+function holdScroll(){if(!tool||lockGuard)return;const y=window.scrollY||0;if(Math.abs(y-lockedY)>1){lockGuard=true;window.scrollTo(window.scrollX||0,lockedY);requestAnimationFrame(()=>lockGuard=false)}}
+function lockPage(){lockedY=window.scrollY||window.pageYOffset||0;document.documentElement.classList.add("study-lock");document.body.classList.add("study-lock");document.addEventListener("touchmove",blockTouch,{passive:false,capture:true});document.addEventListener("gesturestart",blockTouch,{passive:false,capture:true});document.addEventListener("gesturechange",blockTouch,{passive:false,capture:true});window.addEventListener("scroll",holdScroll,{passive:true})}
+function unlockPage(){document.removeEventListener("touchmove",blockTouch,{capture:true});document.removeEventListener("gesturestart",blockTouch,{capture:true});document.removeEventListener("gesturechange",blockTouch,{capture:true});window.removeEventListener("scroll",holdScroll);document.documentElement.classList.remove("study-lock");document.body.classList.remove("study-lock");requestAnimationFrame(()=>window.scrollTo(window.scrollX||0,lockedY))}
+function deactivate(){tool=null;drawing=false;current=null;points=[];document.body.classList.remove("study-drawing");bar.querySelectorAll("[data-tool]").forEach(b=>b.classList.remove("active"));unlockPage()}
+function activate(t){if(tool===t){deactivate();return}if(tool)deactivate();tool=t;document.body.classList.add("study-drawing");bar.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===t));lockPage()}
+function eraseAt(x,y){const paths=[...svg.querySelectorAll("path")];for(let i=paths.length-1;i>=0;i--){const r=paths[i].getBoundingClientRect(),px=x-(window.scrollX||0),py=y-(window.scrollY||0);if(px>=r.left-18&&px<=r.right+18&&py>=r.top-18&&py<=r.bottom+18){paths[i].remove();saveDrawing();return}}}
+bar.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;e.preventDefault();e.stopPropagation();if(b.dataset.tool){activate(b.dataset.tool);return}if(b.dataset.action==="notes"){if(tool)deactivate();notes.classList.toggle("open");if(notes.classList.contains("open"))setTimeout(()=>note.focus(),20)}if(b.dataset.action==="undo"){const last=svg.lastElementChild;if(last){last.remove();saveDrawing()}}if(b.dataset.action==="clear"){svg.innerHTML="";saveDrawing()}});
+document.getElementById("closeStudyNotes").onclick=()=>notes.classList.remove("open");
+document.getElementById("clearStudyNotes").onclick=()=>{note.value="";try{localStorage.removeItem(NOTE_KEY)}catch(e){}};
+try{note.value=localStorage.getItem(NOTE_KEY)||"";note.addEventListener("input",()=>localStorage.setItem(NOTE_KEY,note.value))}catch(e){}
+svg.addEventListener("touchstart",blockTouch,{passive:false,capture:true});svg.addEventListener("touchmove",blockTouch,{passive:false,capture:true});
+svg.addEventListener("pointerdown",e=>{if(!tool)return;e.preventDefault();e.stopPropagation();const xy=pos(e);if(tool==="eraser"){drawing=true;eraseAt(xy[0],xy[1]);try{svg.setPointerCapture(e.pointerId)}catch(_){}return}drawing=true;points=[xy];current=document.createElementNS("http://www.w3.org/2000/svg","path");current.setAttribute("fill","none");current.setAttribute("stroke-linecap","round");current.setAttribute("stroke-linejoin","round");current.setAttribute("pointer-events","none");if(tool==="marker"){current.setAttribute("stroke","#ffd43b");current.setAttribute("stroke-width","22");current.setAttribute("opacity",".38")}else{current.setAttribute("stroke","#153f73");current.setAttribute("stroke-width","3.5");current.setAttribute("opacity","1")}current.setAttribute("d",pathData(points));svg.appendChild(current);try{svg.setPointerCapture(e.pointerId)}catch(_){}},{passive:false});
+svg.addEventListener("pointermove",e=>{if(!drawing||!tool)return;e.preventDefault();e.stopPropagation();const xy=pos(e);if(tool==="eraser"){eraseAt(xy[0],xy[1]);return}if(!current)return;points.push(xy);current.setAttribute("d",pathData(points))},{passive:false});
+function finish(e){if(!drawing)return;e.preventDefault();e.stopPropagation();drawing=false;if(current)saveDrawing();current=null;points=[];try{svg.releasePointerCapture(e.pointerId)}catch(_){}}
+svg.addEventListener("pointerup",finish,{passive:false});svg.addEventListener("pointercancel",finish,{passive:false});
+window.addEventListener("resize",pageSize);window.addEventListener("orientationchange",()=>setTimeout(pageSize,250));restoreDrawing();pageSize();setTimeout(pageSize,300);
+})();
+</script>
+
+</body></html>
